@@ -189,10 +189,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                 <TabsTrigger value="incomes">Receitas ({incomes.length})</TabsTrigger>
               </TabsList>
               <TabsContent value="expenses">
-                <TransactionsTable transactions={expenses} emptyLabel="Nenhuma despesa encontrada." />
+                <TransactionsTable transactions={expenses} categories={categories} emptyLabel="Nenhuma despesa encontrada." />
               </TabsContent>
               <TabsContent value="incomes">
-                <TransactionsTable transactions={incomes} emptyLabel="Nenhuma receita encontrada." />
+                <TransactionsTable transactions={incomes} categories={categories} emptyLabel="Nenhuma receita encontrada." />
               </TabsContent>
             </Tabs>
           )}

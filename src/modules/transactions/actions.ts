@@ -185,6 +185,45 @@ export async function createTransaction(formData: FormData) {
   revalidatePath('/transacoes')
 }
 
+export async function updateTransaction(id: string, formData: FormData) {
+  const supabase = await createClient()
+
+  const categoryId = formData.get('category_id') as string
+  const description = formData.get('description') as string
+  const type = formData.get('type') as 'INCOME' | 'EXPENSE'
+  const paymentMethod = (formData.get('payment_method') as PaymentMethod) || 'OUTRO'
+  const expectedAmount = parseFloat(formData.get('expected_amount') as string)
+  const expectedDate = formData.get('expected_date') as string
+  const status = formData.get('status') as 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED'
+
+  const actualAmountStr = formData.get('actual_amount') as string
+  const actualDateStr = formData.get('actual_date') as string
+  const actualAmount = actualAmountStr ? parseFloat(actualAmountStr) : null
+  const actualDate = actualDateStr || null
+
+  const { error } = await supabase
+    .from('transactions')
+    .update({
+      category_id: categoryId,
+      description,
+      type,
+      payment_method: paymentMethod,
+      expected_amount: expectedAmount,
+      expected_date: expectedDate,
+      actual_amount: actualAmount,
+      actual_date: actualDate,
+      status,
+    })
+    .eq('id', id)
+
+  if (error) {
+    console.error('Error updating transaction', error)
+    throw new Error('Failed to update transaction')
+  }
+
+  revalidatePath('/transacoes')
+}
+
 export async function deleteTransaction(id: string) {
   const supabase = await createClient()
 

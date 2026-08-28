@@ -8,24 +8,40 @@ import {
 } from '@/components/ui/table'
 import { DeleteTransactionButton } from '@/components/shared/DeleteTransactionButton'
 import { MarkAsPaidButton } from '@/components/shared/MarkAsPaidButton'
+import { EditTransactionDialog } from '@/components/transactions/EditTransactionDialog'
 import { PAYMENT_METHOD_LABELS, type PaymentMethod } from '@/modules/transactions/constants'
 
 export interface TransactionRow {
   id: string
   description: string
   expected_date: string
+  actual_date: string | null
   status: 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED'
   type: 'INCOME' | 'EXPENSE'
+  category_id: string | null
   expected_amount: number
   actual_amount: number | null
   payment_method: PaymentMethod
   categories: { name: string } | null
 }
 
+interface Category {
+  id: string
+  name: string
+}
+
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 
-export function TransactionsTable({ transactions, emptyLabel }: { transactions: TransactionRow[]; emptyLabel: string }) {
+export function TransactionsTable({
+  transactions,
+  categories,
+  emptyLabel,
+}: {
+  transactions: TransactionRow[]
+  categories: Category[]
+  emptyLabel: string
+}) {
   return (
     <Table>
       <TableHeader>
@@ -74,6 +90,7 @@ export function TransactionsTable({ transactions, emptyLabel }: { transactions: 
                     {canMarkAsPaid && (
                       <MarkAsPaidButton id={tx.id} description={tx.description} amount={tx.expected_amount} />
                     )}
+                    <EditTransactionDialog transaction={tx} categories={categories} />
                     <DeleteTransactionButton id={tx.id} description={tx.description} />
                   </div>
                 </TableCell>
