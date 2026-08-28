@@ -198,6 +198,130 @@ export async function getSpendingByCategory(contextId: string): Promise<{
   return { breakdown, totalCurrent, totalPrevious }
 }
 
+export interface FinancialOverview {
+  summary: {
+    expectedIncome: number
+    actualIncome: number
+    expectedExpense: number
+    actualExpense: number
+    pendingCount: number
+    overdueCount: number
+  }
+  spending: {
+    breakdown: CategorySpending[]
+    totalCurrent: number
+    totalPrevious: number
+  }
+  investment: InvestmentSummary
+}
+
+interface OverviewRow {
+  type: 'INCOME' | 'EXPENSE'
+  status: 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED'
+  category_id: string | null
+  expected_amount: number
+  actual_amount: number | null
+  expected_date: string
+  categories: { name: string } | null
+}
+
+// Consolida getDashboardSummary + getSpendingByCategory + getInvestmentSummary numa
+// única busca (as três, chamadas separadamente, faziam 3 idas ao Supabase pro mesmo
+// contexto com dados sobrepostos). Usado por /pessoal e /empresa/[id]. Não usar em
+// /objetivos: lá só é preciso 1-2 meses de dados, e essa função busca o histórico
+// inteiro — trocar lá seria regressão de performance, não melhora.
+export async function getFinancialOverview(contextId: string): Promise<FinancialOverview> {
+  const supabase = await createClient()
+
+  const empty: FinancialOverview = {
+    summary: { expectedIncome: 0, actualIncome: 0, expectedExpense: 0, actualExpense: 0, pendingCount: 0, overdueCount: 0 },
+    spending: { breakdown: [], totalCurrent: 0, totalPrevious: 0 },
+    investment: { income: 0, invested: 0, ratio: 0, target: INVESTMENT_TARGET_RATIO, categoryExists: false },
+  }
+
+  const [{ data: invCategory }, { data: transactions, error }] = await Promise.all([
+    supabase.from('categories').select('id').eq('context_id', contextId).ilike('name', INVESTMENT_CATEGORY_NAME).maybeSingle(),
+    supabase.from('transactions').select('*, categories(name)').eq('context_id', contextId),
+  ])
+
+  if (error || !transactions) {
+    console.error('Error fetching financial overview', error)
+    return { ...empty, investment: { ...empty.investment, categoryExists: !!invCategory } }
+  }
+
+  const now = new Date()
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const toISODate = (d: Date) => d.toISOString().split('T')[0]
+  const currentMonthCutoff = toISODate(currentMonthStart)
+  const nextMonthCutoff = toISODate(nextMonthStart)
+  const prevMonthCutoff = toISODate(prevMonthStart)
+
+  let expectedIncome = 0, actualIncome = 0, expectedExpense = 0, actualExpense = 0
+  let pendingCount = 0, overdueCount = 0
+  let investmentIncome = 0, invested = 0
+  const currentByCategory = new Map<string, number>()
+  const previousByCategory = new Map<string, number>()
+
+  for (const tx of transactions as unknown as OverviewRow[]) {
+    const amount = tx.actual_amount ?? tx.expected_amount ?? 0
+
+    // Resumo geral: histórico completo do contexto, igual getDashboardSummary.
+    if (tx.type === 'INCOME') {
+      expectedIncome += tx.expected_amount
+      actualIncome += tx.actual_amount ?? 0
+    } else {
+      expectedExpense += tx.expected_amount
+      actualExpense += tx.actual_amount ?? 0
+    }
+    if (tx.status === 'PENDING') pendingCount++
+    if (tx.status === 'OVERDUE') overdueCount++
+
+    const inCurrentMonth = tx.expected_date >= currentMonthCutoff && tx.expected_date < nextMonthCutoff
+    const inPreviousMonth = tx.expected_date >= prevMonthCutoff && tx.expected_date < currentMonthCutoff
+
+    // Gasto por categoria: mês atual vs. anterior, só despesas, igual getSpendingByCategory.
+    if (tx.type === 'EXPENSE' && (inCurrentMonth || inPreviousMonth)) {
+      const categoryName = tx.categories?.name || 'Sem categoria'
+      const bucket = inCurrentMonth ? currentByCategory : previousByCategory
+      bucket.set(categoryName, (bucket.get(categoryName) || 0) + amount)
+    }
+
+    // Investimento: só mês atual, igual getInvestmentSummary.
+    if (inCurrentMonth) {
+      if (tx.type === 'INCOME') {
+        investmentIncome += amount
+      } else if (invCategory && tx.category_id === invCategory.id) {
+        invested += amount
+      }
+    }
+  }
+
+  const totalCurrent = [...currentByCategory.values()].reduce((a, b) => a + b, 0)
+  const totalPrevious = [...previousByCategory.values()].reduce((a, b) => a + b, 0)
+  const breakdown = [...currentByCategory.entries()]
+    .map(([name, amount]) => ({
+      name,
+      amount,
+      percentage: totalCurrent > 0 ? (amount / totalCurrent) * 100 : 0,
+      previousAmount: previousByCategory.get(name) || 0,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+
+  return {
+    summary: { expectedIncome, actualIncome, expectedExpense, actualExpense, pendingCount, overdueCount },
+    spending: { breakdown, totalCurrent, totalPrevious },
+    investment: {
+      income: investmentIncome,
+      invested,
+      ratio: investmentIncome > 0 ? invested / investmentIncome : 0,
+      target: INVESTMENT_TARGET_RATIO,
+      categoryExists: !!invCategory,
+    },
+  }
+}
+
 export interface InvestmentSummary {
   income: number
   invested: number

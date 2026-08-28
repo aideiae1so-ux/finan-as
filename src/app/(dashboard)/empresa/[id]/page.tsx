@@ -1,4 +1,4 @@
-import { getDashboardSummary } from '@/modules/dashboard/actions'
+import { getFinancialOverview } from '@/modules/dashboard/actions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/server'
 import { FinancialAnalytics } from '@/components/dashboard/FinancialAnalytics'
@@ -22,7 +22,7 @@ export default async function CondominiumDashboardPage({ params }: { params: Pro
     return <div className="p-8">Empresa não encontrada ou sem acesso.</div>
   }
 
-  const summary = await getDashboardSummary(condo.contexts.id)
+  const { summary, spending, investment } = await getFinancialOverview(condo.contexts.id)
   const balance = summary.actualIncome - summary.actualExpense
 
   return (
@@ -84,7 +84,7 @@ export default async function CondominiumDashboardPage({ params }: { params: Pro
         </Card>
       </div>
 
-      <FinancialAnalytics contextId={condo.contexts.id} />
+      <FinancialAnalytics contextId={condo.contexts.id} spendingBreakdown={spending.breakdown} investment={investment} />
     </div>
   )
 }

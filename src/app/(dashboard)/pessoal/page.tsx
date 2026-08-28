@@ -1,4 +1,4 @@
-import { getDashboardSummary } from '@/modules/dashboard/actions'
+import { getFinancialOverview } from '@/modules/dashboard/actions'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { getOrCreatePersonalContext } from '@/modules/contexts/actions'
 import { FinancialAnalytics } from '@/components/dashboard/FinancialAnalytics'
@@ -11,7 +11,7 @@ export default async function PersonalDashboardPage() {
 
   if (!personalContextId) return <div className="p-8">Não autenticado</div>
 
-  const summary = await getDashboardSummary(personalContextId)
+  const { summary, spending, investment } = await getFinancialOverview(personalContextId)
 
   const balance = summary.actualIncome - summary.actualExpense
 
@@ -72,7 +72,7 @@ export default async function PersonalDashboardPage() {
         </Card>
       </div>
 
-      <FinancialAnalytics contextId={personalContextId} />
+      <FinancialAnalytics contextId={personalContextId} spendingBreakdown={spending.breakdown} investment={investment} />
     </div>
   )
 }

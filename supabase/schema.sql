@@ -178,3 +178,44 @@ create policy "Users can manage their own goals" on goals for all using (
 
 grant select, insert, update, delete on goals to anon, authenticated;
 grant all on goals to service_role;
+
+-- Forma de pagamento por transação (Pix, dinheiro, cartão de crédito/débito, boleto).
+create type transaction_payment_method as enum (
+  'PIX',
+  'DINHEIRO',
+  'CARTAO_CREDITO',
+  'CARTAO_DEBITO',
+  'BOLETO',
+  'OUTRO'
+);
+
+alter table transactions
+  add column payment_method transaction_payment_method not null default 'OUTRO';
+
+-- Índices: o schema não tinha nenhum além da chave primária, o que forçava scan
+-- completo em toda leitura (inclusive na checagem de RLS, que compara context_id
+-- em toda política deste arquivo). Puramente aditivo.
+create index if not exists idx_transactions_context_expected_date
+  on transactions (context_id, expected_date);
+create index if not exists idx_transactions_category_id
+  on transactions (category_id);
+create index if not exists idx_transactions_installment_group_id
+  on transactions (installment_group_id);
+create index if not exists idx_transactions_recurrence_id
+  on transactions (recurrence_id);
+create index if not exists idx_transactions_extra_fee_id
+  on transactions (extra_fee_id);
+create index if not exists idx_categories_context_id
+  on categories (context_id);
+create index if not exists idx_condominiums_context_id
+  on condominiums (context_id);
+create index if not exists idx_extra_fees_condominium_id
+  on extra_fees (condominium_id);
+create index if not exists idx_installment_groups_context_id
+  on installment_groups (context_id);
+create index if not exists idx_recurrences_context_id
+  on recurrences (context_id);
+create index if not exists idx_contexts_user_id
+  on contexts (user_id);
+create index if not exists idx_goals_context_id
+  on goals (context_id);

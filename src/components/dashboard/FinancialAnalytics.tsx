@@ -1,18 +1,21 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { TrendingUp } from 'lucide-react'
-import { getInvestmentSummary, getSpendingByCategory } from '@/modules/dashboard/actions'
+import type { CategorySpending, InvestmentSummary } from '@/modules/dashboard/actions'
 import { SpendingBreakdownChart } from '@/components/dashboard/SpendingBreakdownChart'
 import { InvestmentGoalCard } from '@/components/dashboard/InvestmentGoalCard'
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
 
-export async function FinancialAnalytics({ contextId }: { contextId: string }) {
-  const [{ breakdown }, investment] = await Promise.all([
-    getSpendingByCategory(contextId),
-    getInvestmentSummary(contextId),
-  ])
-
+export function FinancialAnalytics({
+  contextId,
+  spendingBreakdown: breakdown,
+  investment,
+}: {
+  contextId: string
+  spendingBreakdown: CategorySpending[]
+  investment: InvestmentSummary
+}) {
   // A maior alta de gasto vs. mês passado é a única chamada direta que vale destacar
   // fora do gráfico — o resto fica só sob hover, para não poluir a tela.
   const biggestIncrease = breakdown

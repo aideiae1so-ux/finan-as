@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import type { PaymentMethod } from '@/modules/transactions/constants'
 
 export async function getTransactions(contextId: string) {
   const supabase = await createClient()
@@ -57,9 +58,10 @@ export async function createTransaction(formData: FormData) {
 
   const installmentsCountStr = formData.get('installments_count') as string
   const installmentsCount = installmentsCountStr ? parseInt(installmentsCountStr) : 1
-  
+
   const isRecurring = formData.get('is_recurring') === 'on'
   const frequency = formData.get('frequency') as 'MONTHLY' | 'WEEKLY' | 'YEARLY' || 'MONTHLY'
+  const paymentMethod = (formData.get('payment_method') as PaymentMethod) || 'OUTRO'
 
   if (installmentsCount > 1) {
     // 1. Handle Installments
@@ -97,6 +99,7 @@ export async function createTransaction(formData: FormData) {
         installment_group_id: group.id,
         description: `${description} (${i}/${installmentsCount})`,
         type,
+        payment_method: paymentMethod,
         expected_amount: expectedAmount,
         expected_date: currentExpectedDate.toISOString().split('T')[0],
         status,
@@ -146,6 +149,7 @@ export async function createTransaction(formData: FormData) {
         recurrence_id: rec.id,
         description,
         type,
+        payment_method: paymentMethod,
         expected_amount: expectedAmount,
         expected_date: currentExpectedDate.toISOString().split('T')[0],
         status
@@ -164,6 +168,7 @@ export async function createTransaction(formData: FormData) {
         category_id: categoryId,
         description,
         type,
+        payment_method: paymentMethod,
         expected_amount: expectedAmount,
         actual_amount: actualAmount,
         expected_date: expectedDate,
@@ -188,6 +193,82 @@ export async function deleteTransaction(id: string) {
   if (error) {
     console.error('Error deleting transaction', error)
     throw new Error('Failed to delete transaction')
+  }
+
+  revalidatePath('/transacoes')
+}
+
+export async function markAsPaid(id: string) {
+  const supabase = await createClient()
+
+  // Resolve o valor no servidor (em vez de aceitar um valor vindo do cliente)
+  // pra que chamar essa action diretamente não permita gravar um actual_amount
+  // arbitrário — a linha "está paga" pelo valor que ela já tinha, ponto.
+  const { data: tx, error: fetchError } = await supabase
+    .from('transactions')
+    .select('expected_amount')
+    .eq('id', id)
+    .single()
+
+  if (fetchError || !tx) {
+    console.error('Error fetching transaction to mark as paid', fetchError)
+    throw new Error('Failed to mark transaction as paid')
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+
+  const { error } = await supabase
+    .from('transactions')
+    .update({ status: 'PAID', actual_date: today, actual_amount: tx.expected_amount })
+    .eq('id', id)
+    .in('status', ['PENDING', 'OVERDUE'])
+
+  if (error) {
+    console.error('Error marking transaction as paid', error)
+    throw new Error('Failed to mark transaction as paid')
+  }
+
+  revalidatePath('/transacoes')
+}
+
+export interface BatchTransactionRow {
+  description: string
+  categoryId: string
+  amount: number
+}
+
+export async function createBatchTransactions(
+  contextId: string,
+  expectedDate: string,
+  rows: BatchTransactionRow[]
+) {
+  const supabase = await createClient()
+
+  const validRows = rows.filter((r) => r.description.trim() && r.categoryId && r.amount > 0)
+  if (validRows.length === 0) return
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const [y, m, d] = expectedDate.split('-').map(Number)
+  const expected = new Date(y, m - 1, d)
+  const status = expected < today ? 'OVERDUE' : 'PENDING'
+
+  const transactionsToInsert = validRows.map((row) => ({
+    context_id: contextId,
+    category_id: row.categoryId,
+    description: row.description,
+    type: 'EXPENSE' as const,
+    payment_method: 'CARTAO_CREDITO' as const,
+    expected_amount: row.amount,
+    expected_date: expectedDate,
+    status,
+  }))
+
+  const { error } = await supabase.from('transactions').insert(transactionsToInsert)
+
+  if (error) {
+    console.error('Error creating batch transactions', error)
+    throw new Error('Failed to create batch transactions')
   }
 
   revalidatePath('/transacoes')
