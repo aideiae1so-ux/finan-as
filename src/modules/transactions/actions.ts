@@ -237,6 +237,20 @@ export async function deleteTransaction(id: string) {
   revalidatePath('/transacoes')
 }
 
+export async function deleteTransactions(ids: string[]) {
+  if (ids.length === 0) return
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('transactions').delete().in('id', ids)
+
+  if (error) {
+    console.error('Error deleting transactions in bulk', error)
+    throw new Error('Failed to delete transactions')
+  }
+
+  revalidatePath('/transacoes')
+}
+
 export async function markAsPaid(id: string) {
   const supabase = await createClient()
 

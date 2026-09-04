@@ -23,19 +23,52 @@ import {
 import { getOrCreatePersonalContext } from '@/modules/contexts/actions'
 import { TransactionsTable } from '@/components/transactions/TransactionsTable'
 import { BatchTransactionDialog } from '@/components/transactions/BatchTransactionDialog'
+import Link from 'next/link'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
-export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ context_id?: string }> }) {
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+
+// "YYYY-MM" do mês atual, usado como padrão quando nenhum mês é escolhido na URL.
+const currentMonthParam = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+const shiftMonth = (month: string, delta: number) => {
+  const [year, monthNum] = month.split('-').map(Number)
+  const d = new Date(year, monthNum - 1 + delta, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+const monthLabel = (month: string) => {
+  const [year, monthNum] = month.split('-').map(Number)
+  const label = new Date(year, monthNum - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
+export default async function TransactionsPage({ searchParams }: { searchParams: Promise<{ context_id?: string; month?: string }> }) {
   const params = await searchParams
 
   // Sem contexto selecionado na URL (ex: vindo do menu lateral fora de uma empresa),
   // caímos no contexto pessoal do usuário, criando-o sob demanda se ainda não existir.
   const currentContextId = params.context_id || (await getOrCreatePersonalContext()) || undefined
+  const month = params.month || currentMonthParam()
 
   const transactions = currentContextId ? await getTransactions(currentContextId) : []
   const categories = currentContextId ? await getCategories(currentContextId) : []
 
-  const expenses = transactions.filter((tx) => tx.type === 'EXPENSE')
-  const incomes = transactions.filter((tx) => tx.type === 'INCOME')
+  const expenses = transactions.filter((tx) => tx.type === 'EXPENSE' && tx.expected_date.startsWith(month))
+  const incomes = transactions.filter((tx) => tx.type === 'INCOME' && tx.expected_date.startsWith(month))
+  const totalExpectedExpense = expenses.reduce((sum, tx) => sum + tx.expected_amount, 0)
+  const totalExpectedIncome = incomes.reduce((sum, tx) => sum + tx.expected_amount, 0)
+
+  const monthLinkFor = (m: string) => {
+    const qs = new URLSearchParams()
+    if (currentContextId) qs.set('context_id', currentContextId)
+    qs.set('month', m)
+    return `/transacoes?${qs.toString()}`
+  }
 
   return (
     <div className="p-8 space-y-6">
@@ -174,8 +207,27 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>Extrato e Previsões</CardTitle>
+          {currentContextId && (
+            <div className="flex items-center gap-2">
+              <Link
+                href={monthLinkFor(shiftMonth(month, -1))}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                aria-label="Mês anterior"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Link>
+              <span className="text-sm font-medium w-36 text-center">{monthLabel(month)}</span>
+              <Link
+                href={monthLinkFor(shiftMonth(month, 1))}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                aria-label="Próximo mês"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {!currentContextId ? (
@@ -189,10 +241,16 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
                 <TabsTrigger value="incomes">Receitas ({incomes.length})</TabsTrigger>
               </TabsList>
               <TabsContent value="expenses">
-                <TransactionsTable transactions={expenses} categories={categories} emptyLabel="Nenhuma despesa encontrada." />
+                <p className="text-sm text-muted-foreground mb-3">
+                  Total previsto em despesas no mês: <span className="font-semibold text-foreground">{formatCurrency(totalExpectedExpense)}</span>
+                </p>
+                <TransactionsTable transactions={expenses} categories={categories} emptyLabel="Nenhuma despesa prevista neste mês." />
               </TabsContent>
               <TabsContent value="incomes">
-                <TransactionsTable transactions={incomes} categories={categories} emptyLabel="Nenhuma receita encontrada." />
+                <p className="text-sm text-muted-foreground mb-3">
+                  Total previsto em receitas no mês: <span className="font-semibold text-foreground">{formatCurrency(totalExpectedIncome)}</span>
+                </p>
+                <TransactionsTable transactions={incomes} categories={categories} emptyLabel="Nenhuma receita prevista neste mês." />
               </TabsContent>
             </Tabs>
           )}
