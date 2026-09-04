@@ -177,8 +177,12 @@ export async function getSpendingByCategory(contextId: string): Promise<{
   const currentMonthCutoff = toISODate(currentMonthStart)
 
   for (const tx of transactions as unknown as SpendingRow[]) {
-    const amount = tx.actual_amount ?? tx.expected_amount ?? 0
     const categoryName = tx.categories?.name || 'Sem categoria'
+    // Investir não é "gastar" — sai do gráfico de gastos por categoria (tem seu
+    // próprio indicador de meta de investimento em outro lugar do dashboard).
+    if (categoryName.toLowerCase() === INVESTMENT_CATEGORY_NAME.toLowerCase()) continue
+
+    const amount = tx.actual_amount ?? tx.expected_amount ?? 0
     const bucket = tx.expected_date >= currentMonthCutoff ? currentByCategory : previousByCategory
     bucket.set(categoryName, (bucket.get(categoryName) || 0) + amount)
   }
@@ -204,6 +208,8 @@ export interface FinancialOverview {
     actualIncome: number
     expectedExpense: number
     actualExpense: number
+    expectedInvested: number
+    actualInvested: number
     pendingCount: number
     overdueCount: number
   }
@@ -234,7 +240,7 @@ export async function getFinancialOverview(contextId: string): Promise<Financial
   const supabase = await createClient()
 
   const empty: FinancialOverview = {
-    summary: { expectedIncome: 0, actualIncome: 0, expectedExpense: 0, actualExpense: 0, pendingCount: 0, overdueCount: 0 },
+    summary: { expectedIncome: 0, actualIncome: 0, expectedExpense: 0, actualExpense: 0, expectedInvested: 0, actualInvested: 0, pendingCount: 0, overdueCount: 0 },
     spending: { breakdown: [], totalCurrent: 0, totalPrevious: 0 },
     investment: { income: 0, invested: 0, ratio: 0, target: INVESTMENT_TARGET_RATIO, categoryExists: false },
   }
@@ -259,6 +265,7 @@ export async function getFinancialOverview(contextId: string): Promise<Financial
   const prevMonthCutoff = toISODate(prevMonthStart)
 
   let expectedIncome = 0, actualIncome = 0, expectedExpense = 0, actualExpense = 0
+  let expectedInvested = 0, actualInvested = 0
   let pendingCount = 0, overdueCount = 0
   let investmentIncome = 0, invested = 0
   const currentByCategory = new Map<string, number>()
@@ -266,11 +273,16 @@ export async function getFinancialOverview(contextId: string): Promise<Financial
 
   for (const tx of transactions as unknown as OverviewRow[]) {
     const amount = tx.actual_amount ?? tx.expected_amount ?? 0
+    const isInvestment = tx.type === 'EXPENSE' && !!invCategory && tx.category_id === invCategory.id
 
-    // Resumo geral: histórico completo do contexto, igual getDashboardSummary.
+    // Resumo geral: histórico completo do contexto. Investir não é "despesa" (não é
+    // perda, é só mudar de lugar), então fica num balde próprio, separado.
     if (tx.type === 'INCOME') {
       expectedIncome += tx.expected_amount
       actualIncome += tx.actual_amount ?? 0
+    } else if (isInvestment) {
+      expectedInvested += tx.expected_amount
+      actualInvested += tx.actual_amount ?? 0
     } else {
       expectedExpense += tx.expected_amount
       actualExpense += tx.actual_amount ?? 0
@@ -281,8 +293,9 @@ export async function getFinancialOverview(contextId: string): Promise<Financial
     const inCurrentMonth = tx.expected_date >= currentMonthCutoff && tx.expected_date < nextMonthCutoff
     const inPreviousMonth = tx.expected_date >= prevMonthCutoff && tx.expected_date < currentMonthCutoff
 
-    // Gasto por categoria: mês atual vs. anterior, só despesas, igual getSpendingByCategory.
-    if (tx.type === 'EXPENSE' && (inCurrentMonth || inPreviousMonth)) {
+    // Gasto por categoria: mês atual vs. anterior, só despesas reais (sem investimento),
+    // igual getSpendingByCategory.
+    if (tx.type === 'EXPENSE' && !isInvestment && (inCurrentMonth || inPreviousMonth)) {
       const categoryName = tx.categories?.name || 'Sem categoria'
       const bucket = inCurrentMonth ? currentByCategory : previousByCategory
       bucket.set(categoryName, (bucket.get(categoryName) || 0) + amount)
@@ -292,7 +305,7 @@ export async function getFinancialOverview(contextId: string): Promise<Financial
     if (inCurrentMonth) {
       if (tx.type === 'INCOME') {
         investmentIncome += amount
-      } else if (invCategory && tx.category_id === invCategory.id) {
+      } else if (isInvestment) {
         invested += amount
       }
     }
@@ -310,7 +323,7 @@ export async function getFinancialOverview(contextId: string): Promise<Financial
     .sort((a, b) => b.amount - a.amount)
 
   return {
-    summary: { expectedIncome, actualIncome, expectedExpense, actualExpense, pendingCount, overdueCount },
+    summary: { expectedIncome, actualIncome, expectedExpense, actualExpense, expectedInvested, actualInvested, pendingCount, overdueCount },
     spending: { breakdown, totalCurrent, totalPrevious },
     investment: {
       income: investmentIncome,

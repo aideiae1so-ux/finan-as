@@ -23,7 +23,7 @@ export default async function CondominiumDashboardPage({ params }: { params: Pro
   }
 
   const { summary, spending, investment } = await getFinancialOverview(condo.contexts.id)
-  const balance = summary.actualIncome - summary.actualExpense
+  const balance = summary.actualIncome - summary.actualExpense - summary.actualInvested
 
   return (
     <div className="p-8 space-y-6">
@@ -34,7 +34,7 @@ export default async function CondominiumDashboardPage({ params }: { params: Pro
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Caixa Atual</CardTitle>
@@ -43,10 +43,10 @@ export default async function CondominiumDashboardPage({ params }: { params: Pro
             <div className={`text-2xl font-bold ${balance >= 0 ? 'text-primary' : 'text-red-600'}`}>
               {formatMoney(balance)}
             </div>
-            <p className="text-xs text-muted-foreground">Arrecadado - Despesas pagas</p>
+            <p className="text-xs text-muted-foreground">Arrecadado - Despesas - Investido</p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Arrecadação</CardTitle>
@@ -68,6 +68,18 @@ export default async function CondominiumDashboardPage({ params }: { params: Pro
               {formatMoney(summary.actualExpense)}
             </div>
             <p className="text-xs text-muted-foreground">A pagar previsto: {formatMoney(summary.expectedExpense)}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Investido (Total)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">
+              {formatMoney(summary.actualInvested)}
+            </div>
+            <p className="text-xs text-muted-foreground">Previsto total: {formatMoney(summary.expectedInvested)}</p>
           </CardContent>
         </Card>
 

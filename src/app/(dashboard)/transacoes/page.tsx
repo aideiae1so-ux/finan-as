@@ -23,6 +23,7 @@ import {
 import { getOrCreatePersonalContext } from '@/modules/contexts/actions'
 import { TransactionsTable } from '@/components/transactions/TransactionsTable'
 import { BatchTransactionDialog } from '@/components/transactions/BatchTransactionDialog'
+import { INVESTMENT_CATEGORY_NAME } from '@/modules/categories/seed'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -60,7 +61,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
 
   const expenses = transactions.filter((tx) => tx.type === 'EXPENSE' && tx.expected_date.startsWith(month))
   const incomes = transactions.filter((tx) => tx.type === 'INCOME' && tx.expected_date.startsWith(month))
-  const totalExpectedExpense = expenses.reduce((sum, tx) => sum + tx.expected_amount, 0)
+  // Investir não conta como "despesa" aqui — é dinheiro que muda de lugar, não que sai
+  // de fato (mesma lógica usada nos painéis Pessoal/Empresa e no gráfico de gastos).
+  const totalExpectedExpense = expenses
+    .filter((tx) => tx.categories?.name?.toLowerCase() !== INVESTMENT_CATEGORY_NAME.toLowerCase())
+    .reduce((sum, tx) => sum + tx.expected_amount, 0)
   const totalExpectedIncome = incomes.reduce((sum, tx) => sum + tx.expected_amount, 0)
 
   const monthLinkFor = (m: string) => {

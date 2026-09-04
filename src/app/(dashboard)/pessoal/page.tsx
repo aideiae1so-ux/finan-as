@@ -13,7 +13,10 @@ export default async function PersonalDashboardPage() {
 
   const { summary, spending, investment } = await getFinancialOverview(personalContextId)
 
-  const balance = summary.actualIncome - summary.actualExpense
+  // Fluxo de caixa real: dinheiro investido também saiu da conta, então entra aqui —
+  // só não conta como "despesa" no sentido de consumo (ver Despesas Realizadas e o
+  // gráfico de gastos por categoria, que excluem investimento de propósito).
+  const balance = summary.actualIncome - summary.actualExpense - summary.actualInvested
 
   return (
     <div className="p-8 space-y-6">
@@ -21,8 +24,8 @@ export default async function PersonalDashboardPage() {
         <h1 className="text-3xl font-bold tracking-tight">Finanças Pessoais</h1>
         <p className="text-muted-foreground mt-1">Resumo do seu patrimônio e gastos pessoais</p>
       </div>
-      
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Saldo Atual (Realizado)</CardTitle>
@@ -31,10 +34,10 @@ export default async function PersonalDashboardPage() {
             <div className={`text-2xl font-bold ${balance >= 0 ? 'text-primary' : 'text-red-600'}`}>
               {formatMoney(balance)}
             </div>
-            <p className="text-xs text-muted-foreground">Receitas - Despesas</p>
+            <p className="text-xs text-muted-foreground">Receitas - Despesas - Investido</p>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Receitas Realizadas</CardTitle>
@@ -56,6 +59,18 @@ export default async function PersonalDashboardPage() {
               {formatMoney(summary.actualExpense)}
             </div>
             <p className="text-xs text-muted-foreground">Previsto total: {formatMoney(summary.expectedExpense)}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Investido (Total)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">
+              {formatMoney(summary.actualInvested)}
+            </div>
+            <p className="text-xs text-muted-foreground">Previsto total: {formatMoney(summary.expectedInvested)}</p>
           </CardContent>
         </Card>
 
